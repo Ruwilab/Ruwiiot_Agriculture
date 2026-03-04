@@ -4,10 +4,10 @@
 #include <DHT.h>  // Librería oficial DHT
 
 // ================= CONFIGURACIÓN =====================
-const char* WIFI_SSID = "HONORX5b";
-const char* WIFI_PASSWORD = "001122336";
+const char* WIFI_SSID = "*****";
+const char* WIFI_PASSWORD = "*****";
 
-const char* MQTT_SERVER = "10.66.76.174";
+const char* MQTT_SERVER = "******";
 const int   MQTT_PORT   = 1883;
 
 // Pin y tipo de sensor
