@@ -1,0 +1,8 @@
+# PlatformIO
+.pio/
+.env/
+.vscode/
+*.bin
+*.elf
+*.pioenvs/
+
