@@ -1,70 +1,54 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <PubSubClient.h>
-#include <DHT.h>  // Librería oficial DHT
+#include <DHT.h>
+#include <ArduinoJson.h> // 1. Incluir la librería JSON
+#include <secrets.h>
 
 // ================= CONFIGURACIÓN =====================
-const char* WIFI_SSID = "*****";
-const char* WIFI_PASSWORD = "****";
+//const char* WIFI_SSID = "********";
+//const char* WIFI_PASSWORD = "*****";
 
-const char* MQTT_SERVER = "*****";
-const int   MQTT_PORT   = 1883;
+//const char* MQTT_SERVER = "********";
+//const int   MQTT_PORT   = ******;
 
-// Pin y tipo de sensor
 #define DHT_PIN 4
 #define DHT_TYPE DHT22
 // =====================================================
 
-// Inicializar sensor
 DHT dht(DHT_PIN, DHT_TYPE);
-
-// Variables globales
 WiFiClient espClient;
 PubSubClient client(espClient);
 unsigned long ultimoEnvio = 0;
 
-// ================= FUNCIONES =========================
 void conectarWiFi() {
-  Serial.print("Conectando a WiFi: ");
-  Serial.println(WIFI_SSID);
-
+  Serial.print("Conectando a WiFi...");
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
   }
-
-  Serial.println();
-  Serial.print("WiFi Conectado. IP: ");
-  Serial.println(WiFi.localIP());
+  Serial.println("\nWiFi Conectado.");
 }
 
 void reconnect() {
   while (!client.connected()) {
     Serial.print("Intentando conexión MQTT...");
-    if (client.connect("ESP32_DHT22")) {
-      Serial.println("¡Conectado al Broker!");
+    // ID de cliente único para evitar desconexiones
+    if (client.connect("ESP32_DHT22_Client")) { 
+      Serial.println("¡Conectado!");
     } else {
-      Serial.print(" fallo, rc=");
+      Serial.print("fallo, rc=");
       Serial.print(client.state());
-      Serial.println(" reintentando en 5s");
       delay(5000);
     }
   }
 }
-// =====================================================
 
 void setup() {
   Serial.begin(115200);
-  delay(1000);
-
-  Serial.println("=================================");
-  Serial.println("  ESP32 - DHT22 MQTT");
-  Serial.println("=================================");
-
-  dht.begin(); // Inicializar sensor
+  dht.begin();
   conectarWiFi();
   client.setServer(MQTT_SERVER, MQTT_PORT);
 }
@@ -74,25 +58,36 @@ void loop() {
   client.loop();
 
   unsigned long ahora = millis();
-  if (ahora - ultimoEnvio > 10000) { // Cada 10 segundos
+  if (ahora - ultimoEnvio > 10000) { 
     ultimoEnvio = ahora;
 
-    // Leer temperatura y humedad
     float humedad = dht.readHumidity();
     float temperatura = dht.readTemperature();
 
     if (isnan(humedad) || isnan(temperatura)) {
       Serial.println("Error leyendo DHT22");
-      return;
+      return; 
     }
 
-    // Crear payload JSON
-    String payload = "{";
-    payload += "\"temperatura\":" + String(temperatura) + ",";
-    payload += "\"humedad\":" + String(humedad) + "}";
+    // --- BLOQUE DE CREACIÓN DE JSON ---
+    
+    // 2. Crear el documento JSON (capacidad de 128 bytes es suficiente)
+    StaticJsonDocument<128> doc;
 
-    // Publicar en MQTT
-    client.publish("casa/ambiente", payload.c_str());
-    Serial.println("Publicado en MQTT: " + payload);
+    // 3. Asignar valores a las llaves
+    doc["temp"] = temperatura;
+    doc["hum"]  = humedad;
+    doc["device"] = "ESP32_DHT22"; // Opcional: Identificar el equipo
+    doc["rssi"] = WiFi.RSSI();     // Opcional: Calidad de señal WiFi
+
+    // 4. Convertir el objeto JSON a una cadena de texto (Buffer)
+    char buffer[128];
+    serializeJson(doc, buffer);
+
+    // 5. Publicar en MQTT usando el buffer generado
+    client.publish("casa/ambiental", buffer);
+
+    Serial.print("Publicado JSON: ");
+    Serial.println(buffer);
   }
 }

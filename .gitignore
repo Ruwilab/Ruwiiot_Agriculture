@@ -5,4 +5,5 @@
 *.bin
 *.elf
 *.pioenvs/
-
+libdeps/
+include/secrets.h
