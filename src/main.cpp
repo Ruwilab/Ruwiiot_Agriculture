@@ -4,20 +4,18 @@
 #include <DHT.h>
 #include <ArduinoJson.h>
 
-
 const char* WIFI_SSID = "FABLAB RUWI 2.4G";
 const char* WIFI_PASSWORD = "100525Ruwi";
 const char* MQTT_SERVER = "192.168.18.25";
 const int   MQTT_PORT   = 1883;
 
-// Datos extraídos de la captura de pantalla
+// Datos de conexión
 const char* DEVICE_ID = "1d4c8195-2bd5-4253-a240-8491470f19b5";
 const char* API_KEY   = "a07a75cfd59ea01565feda4c0a7bafd9e11a3e722fd41a2aaa0ef3035c388ff7";
 const char* TOPIC_TEL = "/agro/00000000-0000-0000-0000-000000000001/1d4c8195-2bd5-4253-a240-8491470f19b5/telemetry";
 
 #define DHT_PIN 4
 #define DHT_TYPE DHT22
-// =================================================================
 
 DHT dht(DHT_PIN, DHT_TYPE);
 WiFiClient espClient;
@@ -38,8 +36,6 @@ void conectarWiFi() {
 void reconnect() {
   while (!client.connected()) {
     Serial.print("Intentando conexión MQTT...");
-    
-    // IMPORTANTE: Se envía ClientID, Usuario (API Key) y Password (API Key)
     if (client.connect(DEVICE_ID, API_KEY, API_KEY)) { 
       Serial.println("¡Conectado exitosamente!");
     } else {
@@ -63,34 +59,33 @@ void loop() {
   client.loop();
 
   unsigned long ahora = millis();
-  if (ahora - ultimoEnvio > 10000) { // Enviar cada 10 segundos
+  if (ahora - ultimoEnvio > 10000) { 
     ultimoEnvio = ahora;
 
     float humedad = dht.readHumidity();
     float temperatura = dht.readTemperature();
+    // Obtener la fuerza de la señal WiFi (RSSI)
+    long rssi = WiFi.RSSI(); 
 
     if (isnan(humedad) || isnan(temperatura)) {
       Serial.println("Error leyendo DHT22");
       return; 
     }
 
-    // --- BLOQUE DE CREACIÓN DE JSON (ESTRUCTURA DE LA IMAGEN) ---
     StaticJsonDocument<256> doc;
-
-    // Según la imagen, los datos deben ir dentro de un objeto llamado "variables"
     JsonObject variables = doc.createNestedObject("variables");
+    
     variables["temperature"] = temperatura;
     variables["humidity"] = humedad;
-    variables["battery"] = 100; // Ejemplo
+    variables["rssi"] = rssi; // Aquí se envía el nivel de señal en dBm
 
-    // Convertir a texto
     char buffer[256];
     serializeJson(doc, buffer);
 
-    // Publicar en el TOPIC específico de la imagen
     if (client.publish(TOPIC_TEL, buffer)) {
       Serial.print("Publicado con éxito en: ");
       Serial.println(TOPIC_TEL);
+      Serial.print("Payload: ");
       Serial.println(buffer);
     } else {
       Serial.println("Error al publicar mensaje.");
