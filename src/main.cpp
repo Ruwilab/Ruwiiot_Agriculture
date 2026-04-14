@@ -2,19 +2,22 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <DHT.h>
-#include <ArduinoJson.h> // 1. Incluir la librería JSON
-#include <secrets.h>
+#include <ArduinoJson.h>
 
-// ================= CONFIGURACIÓN =====================
-//const char* WIFI_SSID = "********";
-//const char* WIFI_PASSWORD = "*****";
 
-//const char* MQTT_SERVER = "********";
-//const int   MQTT_PORT   = ******;
+const char* WIFI_SSID = "FABLAB RUWI 2.4G";
+const char* WIFI_PASSWORD = "100525Ruwi";
+const char* MQTT_SERVER = "192.168.18.25";
+const int   MQTT_PORT   = 1883;
+
+// Datos extraídos de la captura de pantalla
+const char* DEVICE_ID = "1d4c8195-2bd5-4253-a240-8491470f19b5";
+const char* API_KEY   = "a07a75cfd59ea01565feda4c0a7bafd9e11a3e722fd41a2aaa0ef3035c388ff7";
+const char* TOPIC_TEL = "/agro/00000000-0000-0000-0000-000000000001/1d4c8195-2bd5-4253-a240-8491470f19b5/telemetry";
 
 #define DHT_PIN 4
 #define DHT_TYPE DHT22
-// =====================================================
+// =================================================================
 
 DHT dht(DHT_PIN, DHT_TYPE);
 WiFiClient espClient;
@@ -35,12 +38,14 @@ void conectarWiFi() {
 void reconnect() {
   while (!client.connected()) {
     Serial.print("Intentando conexión MQTT...");
-    // ID de cliente único para evitar desconexiones
-    if (client.connect("ESP32_DHT22_Client")) { 
-      Serial.println("¡Conectado!");
+    
+    // IMPORTANTE: Se envía ClientID, Usuario (API Key) y Password (API Key)
+    if (client.connect(DEVICE_ID, API_KEY, API_KEY)) { 
+      Serial.println("¡Conectado exitosamente!");
     } else {
       Serial.print("fallo, rc=");
       Serial.print(client.state());
+      Serial.println(" Intentando de nuevo en 5 segundos...");
       delay(5000);
     }
   }
@@ -58,7 +63,7 @@ void loop() {
   client.loop();
 
   unsigned long ahora = millis();
-  if (ahora - ultimoEnvio > 10000) { 
+  if (ahora - ultimoEnvio > 10000) { // Enviar cada 10 segundos
     ultimoEnvio = ahora;
 
     float humedad = dht.readHumidity();
@@ -69,25 +74,26 @@ void loop() {
       return; 
     }
 
-    // --- BLOQUE DE CREACIÓN DE JSON ---
-    
-    // 2. Crear el documento JSON (capacidad de 128 bytes es suficiente)
-    StaticJsonDocument<128> doc;
+    // --- BLOQUE DE CREACIÓN DE JSON (ESTRUCTURA DE LA IMAGEN) ---
+    StaticJsonDocument<256> doc;
 
-    // 3. Asignar valores a las llaves
-    doc["temp"] = temperatura;
-    doc["hum"]  = humedad;
-    doc["device"] = "ESP32_DHT22"; // Opcional: Identificar el equipo
-    doc["rssi"] = WiFi.RSSI();     // Opcional: Calidad de señal WiFi
+    // Según la imagen, los datos deben ir dentro de un objeto llamado "variables"
+    JsonObject variables = doc.createNestedObject("variables");
+    variables["temperature"] = temperatura;
+    variables["humidity"] = humedad;
+    variables["battery"] = 100; // Ejemplo
 
-    // 4. Convertir el objeto JSON a una cadena de texto (Buffer)
-    char buffer[128];
+    // Convertir a texto
+    char buffer[256];
     serializeJson(doc, buffer);
 
-    // 5. Publicar en MQTT usando el buffer generado
-    client.publish("casa/ambiental", buffer);
-
-    Serial.print("Publicado JSON: ");
-    Serial.println(buffer);
+    // Publicar en el TOPIC específico de la imagen
+    if (client.publish(TOPIC_TEL, buffer)) {
+      Serial.print("Publicado con éxito en: ");
+      Serial.println(TOPIC_TEL);
+      Serial.println(buffer);
+    } else {
+      Serial.println("Error al publicar mensaje.");
+    }
   }
 }
